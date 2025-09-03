@@ -1,4 +1,43 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -25,44 +64,96 @@
             border-bottom: 1px solid #4a5c3a;
             display: flex;
             align-items: center;
-            padding: 0 20px;
+            padding: 0 10px;
             z-index: 1000;
             box-sizing: border-box;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
         }
         #topBar h2 {
             margin: 0;
-            font-size: clamp(1.2em, 3vw, 1.4em);
+            font-size: clamp(1em, 2.5vw, 1.2em);
             color: #f5f5e8;
             background: linear-gradient(45deg, #6b8e23, #228b22);
-            padding: 8px 15px;
+            padding: 6px 10px;
             border-radius: 5px;
             flex: 0 0 auto;
         }
         #inputContainer {
             display: flex;
             align-items: center;
-            gap: clamp(5px, 1vw, 8px);
-            margin-left: 20px;
+            gap: clamp(4px, 1vw, 6px);
+            margin-left: 10px;
             flex: 1;
             flex-wrap: wrap;
             justify-content: flex-start;
         }
         #convertButton {
-            position: absolute;
-            right: 20px;
             background-color: #2e7d32;
             color: white;
             border: none;
             cursor: pointer;
             border-radius: 5px;
-            padding: 0 clamp(10px, 2vw, 12px);
-            height: 36px;
-            font-size: clamp(0.7em, 1.8vw, 0.8em);
+            padding: 0 clamp(8px, 2vw, 10px);
+            height: 32px;
+            font-size: clamp(0.65em, 1.6vw, 0.75em);
             font-weight: bold;
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+        @media (max-width: 600px) {
+            #topBar {
+                height: auto;
+                min-height: 100px;
+                padding: 8px 10px;
+                flex-wrap: wrap;
+                align-items: flex-start;
+            }
+            #topBar h2 {
+                font-size: clamp(0.9em, 4vw, 1em);
+                padding: 5px 8px;
+                margin-right: 10px;
+            }
+            #inputContainer {
+                flex: 1 1 100%;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin-left: 0;
+                justify-content: flex-start;
+            }
+            #inputContainer > label, #inputContainer > input, #inputContainer > select {
+                flex: 0 0 auto;
+            }
+            #inputContainer > button {
+                flex: 0 0 auto;
+            }
+            #convertButton {
+                flex: 0 0 auto;
+                margin-left: 10px;
+                height: 32px;
+                font-size: clamp(0.7em, 4vw, 0.8em);
+            }
+            #fileInputLabel, #togglePDFButton, #toggleNameButton, #toggleNumberButton {
+                width: 32px;
+                height: 32px;
+                font-size: clamp(0.65em, 3.5vw, 0.7em);
+            }
+            input[type="text"], select {
+                width: clamp(100px, 30vw, 120px);
+                height: 32px;
+                font-size: clamp(0.65em, 3.5vw, 0.7em);
+            }
+            #toggleNameButton, #toggleNumberButton {
+                font-size: clamp(6px, 2.5vw, 7px);
+                line-height: 1.1;
+            }
+            body {
+                padding-top: 100px;
+            }
+            #imageContainer {
+                margin-top: 20px;
+            }
         }
         #convertButton.loading {
             background-color: #2e7d32;
@@ -72,8 +163,8 @@
         #convertButton.loading::after {
             content: '';
             position: absolute;
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             border: 3px solid white;
             border-top: 3px solid transparent;
             border-radius: 50%;
@@ -281,18 +372,18 @@
             right: 10px;
         }
         button, input, select {
-            margin: clamp(5px, 1vw, 8px);
-            padding: 0 clamp(6px, 1.5vw, 8px);
-            height: 36px;
-            font-size: clamp(0.7em, 1.8vw, 0.8em);
+            margin: clamp(4px, 1vw, 6px);
+            padding: 0 clamp(5px, 1.2vw, 7px);
+            height: 32px;
+            font-size: clamp(0.65em, 1.6vw, 0.75em);
             box-sizing: border-box;
             line-height: normal;
         }
         input[type="text"] {
-            width: clamp(80px, 15vw, 100px);
+            width: clamp(70px, 12vw, 90px);
         }
         select {
-            width: clamp(80px, 15vw, 100px);
+            width: clamp(70px, 12vw, 90px);
         }
         #togglePDFButton {
             background-color: #689f38;
@@ -301,11 +392,11 @@
             cursor: pointer;
             border-radius: 5px;
             background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M6 2v6h.01L6 8.01 10 12l-4 4 .01.01H6V22h12v-5.99h-.01L18 16l-4-4 4-3.99-.01-.01H18V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z"/></svg>');
-            background-size: 20px;
+            background-size: 18px;
             background-position: center;
             background-repeat: no-repeat;
             text-indent: -9999px;
-            width: 36px;
+            width: 32px;
         }
         #togglePDFButton.contracted {
             background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M6 2v6h.01L6 8.01 10 12l-4 4 .01.01H6V22h12v-5.99h-.01L18 16l-4-4 4-3.99-.01-.01H18V2H6zm10 14.5V20H8v-3.5l4-4 4 4zm-4-5l-4-4V4h8v3.5l-4 4z"/></svg>');
@@ -330,14 +421,14 @@
             cursor: pointer;
             border-radius: 5px;
             background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#333"><path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-4.86 8.86l-3 3.87L9 13.14 6 17h12l-3.86-5.14z"/></svg>');
-            background-size: 16px;
-            background-position: 6px center;
+            background-size: 14px;
+            background-position: 5px center;
             background-repeat: no-repeat;
             text-indent: 0;
-            width: 36px;
-            font-size: 8px;
+            width: 32px;
+            font-size: 7px;
             font-weight: bold;
-            line-height: 1.2;
+            line-height: 1.1;
             text-align: center;
             padding: 0;
             display: flex;
@@ -358,14 +449,14 @@
             cursor: pointer;
             border-radius: 5px;
             background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#333"><path d="M3 3v18h18V3H3zm2 2h14v14H5V5zm2 2v2h2V7H7zm0 4v2h2v-2H7zm0 4v2h2v-2H7z"/></svg>');
-            background-size: 16px;
-            background-position: 6px center;
+            background-size: 14px;
+            background-position: 5px center;
             background-repeat: no-repeat;
             text-indent: 0;
-            width: 36px;
-            font-size: 8px;
+            width: 32px;
+            font-size: 7px;
             font-weight: bold;
-            line-height: 1.2;
+            line-height: 1.1;
             text-align: center;
             padding: 0;
             display: flex;
@@ -387,11 +478,11 @@
             cursor: pointer;
             border-radius: 5px;
             background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M19 3H5c-1.11 0-2 .89-2 2v14c0 1.11.89 2 2 2h14c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>');
-            background-size: 20px;
+            background-size: 18px;
             background-position: center;
             background-repeat: no-repeat;
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
         }
         #fileInputLabel:hover {
             background-color: #7b5e57;
@@ -407,17 +498,17 @@
         <div id="inputContainer">
             <label for="imageInput" id="fileInputLabel" title="Upload images or PDFs"></label>
             <input type="file" id="imageInput" accept="image/*,application/pdf" multiple>
-            <button id="togglePDFButton" class="hidden contracted" onclick="togglePDFExpansion()" title="Expand or contract PDF pages"></button>
-            <button id="toggleNameButton" onclick="toggleNameDisplay()" title="Toggle display of file names">Name<br>Off</button>
-            <button id="toggleNumberButton" onclick="toggleNumberDisplay()" title="Toggle page numbers in output PDF">Page<br>Count<br>Off</button>
             <input type="text" id="pdfNameInput" placeholder="Enter PDF name prefix" title="Set prefix for output PDF name">
             <select id="paperSize" title="Select paper size for PDF output">
                 <option value="none">Full Size</option>
                 <option value="A4">A4</option>
                 <option value="A5">A5</option>
             </select>
+            <button id="togglePDFButton" class="hidden contracted" onclick="togglePDFExpansion()" title="Expand or contract PDF pages"></button>
+            <button id="toggleNameButton" onclick="toggleNameDisplay()" title="Toggle display of file names">Name<br>Off</button>
+            <button id="toggleNumberButton" onclick="toggleNumberDisplay()" title="Toggle page numbers in output PDF">Page<br>Count<br>Off</button>
+            <button id="convertButton" onclick="generatePDF()" title="Generate and download PDF">Convert to PDF</button>
         </div>
-        <button id="convertButton" onclick="generatePDF()" title="Generate and download PDF">Convert to PDF</button>
     </div>
     <div id="imageContainer"></div>
     <div id="overlay">
@@ -447,6 +538,8 @@
         let pdfFiles = new Map();
         let deletedPDFPages = new Map();
         let currentOverlayIndex = -1;
+        let lastTouchMove = 0;
+        const touchMoveDelay = 100; // Debounce delay in ms
 
         imageInput.addEventListener('change', handleFileUpload);
         imageContainer.addEventListener('dragover', (e) => {
@@ -914,6 +1007,9 @@
 
                 draggable.addEventListener('touchmove', (e) => {
                     e.preventDefault();
+                    const now = Date.now();
+                    if (now - lastTouchMove < touchMoveDelay) return;
+                    lastTouchMove = now;
                     const touch = e.touches[0];
                     const target = document.elementFromPoint(touch.clientX, touch.clientY);
                     const targetDraggable = target.closest('.draggable-item');
