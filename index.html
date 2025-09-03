@@ -121,6 +121,10 @@
             object-fit: cover;
             pointer-events: none;
         }
+        .image-wrapper:hover .remove-btn,
+        .image-wrapper:hover .view-btn {
+            display: flex;
+        }
         .pdf-label {
             position: absolute;
             top: 5px;
@@ -191,10 +195,90 @@
             width: 20px;
             height: 20px;
             cursor: pointer;
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             font-size: 12px;
+        }
+        .view-btn {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            background-color: rgba(128, 128, 128, 0.7);
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 4px;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .view-btn:hover {
+            background-color: rgba(128, 128, 128, 0.9);
+        }
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        #overlay.active {
+            display: flex;
+        }
+        #overlayImage {
+            max-width: 90vw;
+            max-height: 90vh;
+            object-fit: contain;
+        }
+        #overlayClose {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            background: red;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+        #overlayPrev, #overlayNext {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(128, 128, 128, 0.7);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #overlayPrev:hover, #overlayNext:hover {
+            background: rgba(128, 128, 128, 0.9);
+        }
+        #overlayPrev {
+            left: 10px;
+        }
+        #overlayNext {
+            right: 10px;
         }
         button, input, select {
             margin: clamp(5px, 1vw, 8px);
@@ -336,6 +420,12 @@
         <button id="convertButton" onclick="generatePDF()" title="Generate and download PDF">Convert to PDF</button>
     </div>
     <div id="imageContainer"></div>
+    <div id="overlay">
+        <img id="overlayImage" src="">
+        <button id="overlayClose">X</button>
+        <button id="overlayPrev">&larr;</button>
+        <button id="overlayNext">&rarr;</button>
+    </div>
 
     <script>
         const imageInput = document.getElementById('imageInput');
@@ -345,12 +435,18 @@
         const toggleNameButton = document.getElementById('toggleNameButton');
         const toggleNumberButton = document.getElementById('toggleNumberButton');
         const convertButton = document.getElementById('convertButton');
+        const overlay = document.getElementById('overlay');
+        const overlayImage = document.getElementById('overlayImage');
+        const overlayClose = document.getElementById('overlayClose');
+        const overlayPrev = document.getElementById('overlayPrev');
+        const overlayNext = document.getElementById('overlayNext');
         let images = [];
         let pdfExpanded = false;
         let showNames = false;
         let showNumbers = false;
         let pdfFiles = new Map();
         let deletedPDFPages = new Map();
+        let currentOverlayIndex = -1;
 
         imageInput.addEventListener('change', handleFileUpload);
         imageContainer.addEventListener('dragover', (e) => {
@@ -366,6 +462,75 @@
             const files = Array.from(e.dataTransfer.files);
             handleFileUpload({ target: { files } });
         });
+
+        overlayClose.addEventListener('click', closeOverlay);
+        overlayPrev.addEventListener('click', showPreviousImage);
+        overlayNext.addEventListener('click', showNextImage);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlayImage || e.target === overlayClose || e.target === overlayPrev || e.target === overlayNext) {
+                return;
+            }
+            closeOverlay();
+        });
+
+        function handleKeyDown(e) {
+            if (overlay.classList.contains('active')) {
+                if (e.key === 'ArrowLeft') {
+                    showPreviousImage();
+                } else if (e.key === 'ArrowRight') {
+                    showNextImage();
+                }
+            }
+        }
+
+        function closeOverlay() {
+            overlay.classList.remove('active');
+            currentOverlayIndex = -1;
+            document.removeEventListener('keydown', handleKeyDown);
+        }
+
+        function showImageInOverlay(groupIndex, subIndex = null) {
+            const flatImages = flattenImages();
+            if (subIndex !== null) {
+                const group = images[groupIndex];
+                const flatIndex = flatImages.findIndex(item => item === group[subIndex]);
+                currentOverlayIndex = flatIndex;
+            } else {
+                currentOverlayIndex = flatImages.findIndex(item => item === images[groupIndex]);
+            }
+            updateOverlayImage();
+            overlay.classList.add('active');
+            document.addEventListener('keydown', handleKeyDown);
+        }
+
+        function flattenImages() {
+            return images.flatMap(item => Array.isArray(item) ? item : [item]);
+        }
+
+        function showPreviousImage() {
+            const flatImages = flattenImages();
+            if (currentOverlayIndex > 0) {
+                currentOverlayIndex--;
+                updateOverlayImage();
+            }
+        }
+
+        function showNextImage() {
+            const flatImages = flattenImages();
+            if (currentOverlayIndex < flatImages.length - 1) {
+                currentOverlayIndex++;
+                updateOverlayImage();
+            }
+        }
+
+        function updateOverlayImage() {
+            const flatImages = flattenImages();
+            if (currentOverlayIndex >= 0 && currentOverlayIndex < flatImages.length) {
+                overlayImage.src = flatImages[currentOverlayIndex].src;
+                overlayPrev.style.display = currentOverlayIndex === 0 ? 'none' : 'flex';
+                overlayNext.style.display = currentOverlayIndex === flatImages.length - 1 ? 'none' : 'flex';
+            }
+        }
 
         async function handleFileUpload(event) {
             const files = Array.from(event.target.files);
@@ -442,17 +607,14 @@
             if (togglePDFButton.disabled) return;
 
             if (pdfExpanded) {
-                // Check for images between PDF pages from the same PDF
                 let orderWillBeLost = false;
                 images.forEach(item => {
                     if (Array.isArray(item)) {
                         const pdfItems = item.filter(subItem => subItem.originalType === 'pdf');
                         if (pdfItems.length > 1) {
-                            // Check if all PDF items in the group are from the same PDF
                             const fileName = pdfItems[0].file.name;
                             const allSamePDF = pdfItems.every(subItem => subItem.file.name === fileName);
                             if (allSamePDF) {
-                                // Check if any non-PDF image is between PDF pages
                                 let lastPDFIndex = -1;
                                 for (let i = 0; i < item.length; i++) {
                                     if (item[i].originalType === 'pdf') {
@@ -465,7 +627,6 @@
                             }
                         }
                     } else if (item.originalType === 'pdf') {
-                        // Check if an image follows this PDF page and precedes another from the same PDF
                         const index = images.indexOf(item);
                         if (index < images.length - 1 && images[index + 1].type === 'image' && !images[index + 1].originalType) {
                             const nextPDF = images.slice(index + 2).find(nextItem => !Array.isArray(nextItem) && nextItem.originalType === 'pdf' && nextItem.file.name === item.file.name);
@@ -646,6 +807,13 @@
             removeBtn.title = 'Remove this item';
             removeBtn.onclick = () => removeItem(groupIndex, subIndex);
             wrapper.appendChild(removeBtn);
+
+            const viewBtn = document.createElement('button');
+            viewBtn.className = 'view-btn';
+            viewBtn.innerText = 'View';
+            viewBtn.title = 'View full-size image';
+            viewBtn.onclick = () => showImageInOverlay(groupIndex, subIndex);
+            wrapper.appendChild(viewBtn);
 
             return wrapper;
         }
