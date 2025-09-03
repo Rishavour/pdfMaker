@@ -1,43 +1,4 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -479,6 +440,50 @@
 
         function togglePDFExpansion() {
             if (togglePDFButton.disabled) return;
+
+            if (pdfExpanded) {
+                // Check for images between PDF pages from the same PDF
+                let orderWillBeLost = false;
+                images.forEach(item => {
+                    if (Array.isArray(item)) {
+                        const pdfItems = item.filter(subItem => subItem.originalType === 'pdf');
+                        if (pdfItems.length > 1) {
+                            // Check if all PDF items in the group are from the same PDF
+                            const fileName = pdfItems[0].file.name;
+                            const allSamePDF = pdfItems.every(subItem => subItem.file.name === fileName);
+                            if (allSamePDF) {
+                                // Check if any non-PDF image is between PDF pages
+                                let lastPDFIndex = -1;
+                                for (let i = 0; i < item.length; i++) {
+                                    if (item[i].originalType === 'pdf') {
+                                        if (lastPDFIndex !== -1 && i > lastPDFIndex + 1) {
+                                            orderWillBeLost = true;
+                                        }
+                                        lastPDFIndex = i;
+                                    }
+                                }
+                            }
+                        }
+                    } else if (item.originalType === 'pdf') {
+                        // Check if an image follows this PDF page and precedes another from the same PDF
+                        const index = images.indexOf(item);
+                        if (index < images.length - 1 && images[index + 1].type === 'image' && !images[index + 1].originalType) {
+                            const nextPDF = images.slice(index + 2).find(nextItem => !Array.isArray(nextItem) && nextItem.originalType === 'pdf' && nextItem.file.name === item.file.name);
+                            if (nextPDF) {
+                                orderWillBeLost = true;
+                            }
+                        }
+                    }
+                });
+
+                if (orderWillBeLost) {
+                    const proceed = confirm('Contracting the PDF will lose the order of images relative to PDF pages. Proceed?');
+                    if (!proceed) {
+                        return;
+                    }
+                }
+            }
+
             pdfExpanded = !pdfExpanded;
             const hasMixedGroup = images.some(item => Array.isArray(item) && item.some(subItem => subItem.type === 'image' && !subItem.originalType) && item.some(subItem => subItem.originalType === 'pdf'));
             togglePDFButton.textContent = pdfExpanded && hasMixedGroup ? 'Split' : pdfExpanded ? 'Contract PDF' : 'Expand PDF';
@@ -486,6 +491,7 @@
             togglePDFButton.classList.toggle('expanded', pdfExpanded);
             const newImages = [];
             const processedGroups = new Set();
+            const groupItems = [];
 
             function processItem(item, groupId = null) {
                 if (Array.isArray(item)) {
